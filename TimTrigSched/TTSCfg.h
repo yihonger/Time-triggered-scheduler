@@ -60,7 +60,7 @@ void ExampleStateTwo(int* state)
     TTS_SetTask(&task[EXAMPLE], 50);
 }
 
-void (* const ExampleTaskState)[] = {
+void (* const ExampleTaskState)[](int*) = {
     ExampleStateOne,
     ExampleStateTwo,
 };
