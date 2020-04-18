@@ -2,51 +2,72 @@
 #include "TimTrigSched.h"
 
 static unsigned int sysTick;
-static Task* taskArray[3][TASK_MAX_NUMS+1];
+
+static Task task[TASK_MAX_NUMS];
+static Task* taskArray[3][TASK_MAX_NUMS];
 static PriQueue dlyArray[2];
 
 static DlyList dlyList; //延时表
 static PriQueue rdyList;//就绪表
-static Task idleTask;
 
-TTSResult TTS_Init(TaskFun IdleTaskFun)
+
+TTSResult TTS_InitTask(enum TaskName name, const TaskCfg* cfg)
 {
-    Task_Init(&idleTask, IdleTaskFun, 0, 0);
-    PriQueue_Init(&rdyList, (void**)taskArray[0], TASK_MAX_NUMS + 1, Task_PriCompareEE);
-    PriQueue_Init(&dlyArray[0], (void**)taskArray[1], TASK_MAX_NUMS + 1, Task_tickCompareEE);
-    PriQueue_Init(&dlyArray[1], (void**)taskArray[2], TASK_MAX_NUMS + 1, Task_tickCompareEE);
-    DlyList_Init(&dlyList, &dlyArray, &sysTick, Task_tickCompareTE);
+    if (!cfg && !cfg->taskFun) return TTS_ERR;
+
+    task[name].cycle = cfg->cycle;
+    task[name].priority = cfg->priority;
+    task[name].runTick = 0;
+    task[name].taskFun = cfg->taskFun;
+
     return TTS_OK;
 }
 
-TTSResult TTS_CreateTask(Task* task, unsigned int dlyTick)
+TTSResult TTS_Init(TaskFun IdleTaskFun)
+{
+    TaskCfg cfg = {0};
+    cfg.taskFun = IdleTaskFun;
+
+    if (!TTS_InitTask(IDLE, &cfg)) return TTS_ERR;
+
+    PriQueue_Init(&rdyList, (void**)taskArray[0], TASK_MAX_NUMS, Task_PriCompareEE);
+    PriQueue_Init(&dlyArray[0], (void**)taskArray[1], TASK_MAX_NUMS, Task_tickCompareEE);
+    PriQueue_Init(&dlyArray[1], (void**)taskArray[2], TASK_MAX_NUMS, Task_tickCompareEE);
+    DlyList_Init(&dlyList, &dlyArray, &sysTick, Task_tickCompareTE);
+
+    return TTS_OK;
+}
+
+TTSResult TTS_CreateTask(enum TaskName name, unsigned int dlyTick)
 {
     TTSResult rtn;
     
     if (dlyTick == 0)
     {
-        rtn = PriQueue_In(&rdyList, (void*)task);
+        rtn = PriQueue_In(&rdyList, &task[name]);
     }
     else
     {
         task->runTick = sysTick + dlyTick;
-        rtn = DlyList_In(&dlyList, (void*)task);
+        rtn = DlyList_In(&dlyList, &task[name]);
     }
     
     return rtn;
 }
 
-TTSResult TTS_SetTask(Task* task, unsigned int cycle)
+TTSResult TTS_SetTask(enum TaskName name, unsigned int cycle)
 {
-    task->cycle = cycle;
+    task[name].cycle = cycle;
     
     return TTS_OK;
 }
 
 
+
+
 //call in tick interrupt
 TTSResult TTS_Sched(void)
-{    
+{
     sysTick++;
     Task* task = 0;
     while (DlyList_GetHead(&dlyList, (void**)&task))
@@ -80,8 +101,7 @@ TTSResult TTS_Run(void)
         }
         else
         {
-            idleTask.taskFun();
+            task[IDLE].taskFun();
         }        
     }
-    return TTS_OK;
 }

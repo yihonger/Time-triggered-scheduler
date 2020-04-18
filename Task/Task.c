@@ -1,9 +1,7 @@
 
 #include "Task.h"
 
-Task task[TASK_MAX_NUMS];
-
-TTSResult Task_Init(   Task* task,
+TTSResult Task_Init(    Task* task,
                         TaskFun taskFun,
                         unsigned int cycle,
                         unsigned int priority)

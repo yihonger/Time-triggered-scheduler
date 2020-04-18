@@ -12,8 +12,6 @@ typedef struct
     unsigned int runTick;  
 }Task;
 
-extern Task task[TASK_MAX_NUMS];
-
 TTSResult Task_Init(    Task* task,
                         TaskFun taskFun,
                         unsigned int cycle,
