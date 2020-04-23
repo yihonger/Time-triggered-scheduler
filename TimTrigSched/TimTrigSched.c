@@ -9,6 +9,7 @@ static PriQueue dlyArray[2];
 
 static DlyList dlyList; //延时表
 static PriQueue rdyList;//就绪表
+static unsigned char registry[ (TASK_MAX_NUMS + 7) / 8 ] = {0};
 
 
 TTSResult TTS_InitTask(enum TaskName name, const TaskCfg* cfg)
@@ -29,6 +30,7 @@ TTSResult TTS_Init(TaskFun IdleTaskFun)
     cfg.taskFun = IdleTaskFun;
 
     if (!TTS_InitTask(IDLE, &cfg)) return TTS_ERR;
+    else registry[0] |= 0x01;
 
     PriQueue_Init(&rdyList, (void**)taskArray[0], TASK_MAX_NUMS, Task_PriCompareEE);
     PriQueue_Init(&dlyArray[0], (void**)taskArray[1], TASK_MAX_NUMS, Task_tickCompareEE);
@@ -42,16 +44,24 @@ TTSResult TTS_CreateTask(enum TaskName name, unsigned int dlyTick)
 {
     TTSResult rtn;
     
+    unsigned int idx = name >> 3;
+    unsigned int offset = name & 0x07;
+    unsigned int pos = 0x01u << offset;
+
+    if (registry[idx] & pos)    return TTS_ERR;
+
     if (dlyTick == 0)
     {
         rtn = PriQueue_In(&rdyList, &task[name]);
     }
     else
     {
-        task->runTick = sysTick + dlyTick;
+        task[name].runTick = sysTick + dlyTick;
         rtn = DlyList_In(&dlyList, &task[name]);
     }
     
+    if (rtn) registry[idx] |= pos;
+
     return rtn;
 }
 
@@ -69,13 +79,13 @@ TTSResult TTS_SetTask(enum TaskName name, unsigned int cycle)
 TTSResult TTS_Sched(void)
 {
     sysTick++;
-    Task* task = 0;
-    while (DlyList_GetHead(&dlyList, (void**)&task))
+    Task* rdyTask = 0;
+    while (DlyList_GetHead(&dlyList, (void**)&rdyTask))
     {
-        if (task->runTick == sysTick)
+        if (rdyTask->runTick == sysTick)
         {
-            DlyList_Out(&dlyList, (void**)&task);
-            PriQueue_In(&rdyList, (void*)task);
+            DlyList_Out(&dlyList, (void**)&rdyTask);
+            PriQueue_In(&rdyList, (void*)rdyTask);
         }
         else
         {
@@ -98,6 +108,14 @@ TTSResult TTS_Run(void)
                 rdyTask->runTick = sysTick + rdyTask->cycle;
                 DlyList_In(&dlyList, (void*)rdyTask);
             }
+            else
+            {
+                unsigned int offset = rdyTask - &task[IDLE];
+                unsigned int idx = offset >> 3;
+                offset  = offset & 0x07;
+                registry[idx] ^= 0x01u << offset;
+            }
+            
         }
         else
         {
